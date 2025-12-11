@@ -1,5 +1,5 @@
 {
-  "name": "copy-of-wealthflow---offline-wealth-tracker",
+  "name": "wealthflow---offline-wealth-tracker",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,7 +12,8 @@
     "react": "^19.2.1",
     "lucide-react": "^0.560.0",
     "react-dom": "^19.2.1",
-    "recharts": "^3.5.1"
+    "recharts": "^3.5.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

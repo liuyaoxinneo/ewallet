@@ -1,5 +1,5 @@
 import { Transaction, DailyBalance, TransactionType } from './types';
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-latest/package/xlsx.mjs';
+import * as XLSX from 'xlsx';
 
 export const generateId = (): string => {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -43,43 +43,19 @@ export const calculateBalances = (transactions: Transaction[], targetDate?: stri
         acc.netWorth -= amount;
         break;
       case 'LOAN_IN':
-        // Borrowing money increases cash on hand (Liquid), but creates liability (Net Worth stays same or decreases depending on accounting view, usually Net Worth = Assets - Liab. Here simplicity: Net Worth decreases, Cash increases)
-        // However, for "Personal Wealth" tracking often people want to know "What do I have".
-        // Let's assume: Net Worth = Assets - Liabilities.
-        // Borrowing: Assets (Cash) +100, Liabilities (Debt) +100. Net Worth change = 0.
-        // Liquid Funds: +100.
         acc.liquid += amount;
-        // Net worth technically doesn't change, but let's track it strictly:
-        // acc.netWorth (no change)
         break;
       case 'INVESTMENT':
-        // Move cash to investment.
-        // Liquid: -100.
-        // Net Worth: No change (just asset transfer), unless lost.
-        // However, user specified "Withdrawable" distinction.
         if (t.isWithdrawable) {
-           // If it's withdrawable, treat it as Liquid for "Usage" purposes? 
-           // Usually Investment is separate. But prompt says "Can I use it?".
-           // If withdrawable, yes.
-           // So Investment (Withdrawable): Liquid Change 0 (Cash -> Inv -> Cash equivalent).
-           // Investment (Locked): Liquid -100.
            if (!t.isWithdrawable) {
              acc.liquid -= amount;
            }
         } else {
-          // Default to locked if undefined, or standard logic
-          // Let's assume standard Investment subtracts from Cash.
-          // If withdrawable is TRUE, we add it back to Liquid or don't subtract it?
-          // Simplest Model:
-          // Investment is an outflow of Cash.
           acc.liquid -= amount;
-          // If it is withdrawable, it counts as Liquid Assets available. 
           if (t.isWithdrawable) {
             acc.liquid += amount; 
           }
         }
-        // Net Worth always includes investments
-        // acc.netWorth (no change, it's a transfer)
         break;
       case 'CUSTOM':
         if (t.isPositive) {
@@ -100,7 +76,6 @@ export const getDailyBalancesForMonth = (transactions: Transaction[], year: numb
   const map = new Map<string, number>();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // We need to calculate cumulative balance up to each day
   // Optimization: Sort transactions once
   const sorted = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -110,7 +85,6 @@ export const getDailyBalancesForMonth = (transactions: Transaction[], year: numb
   // Pre-calculate balance up to start of month
   const startOfMonth = new Date(year, month, 1).getTime();
   
-  // Calculate baseline before this month
   while(tIndex < sorted.length && new Date(sorted[tIndex].date).getTime() < startOfMonth) {
       const t = sorted[tIndex];
       const amount = Number(t.amount);
@@ -156,7 +130,6 @@ export const exportToExcel = (transactions: Transaction[], range?: {start: strin
     });
   }
 
-  // Flatten data for Excel
   const rows = dataToExport.map(t => ({
     'ID': t.id,
     '日期 (Date)': t.date,
@@ -189,7 +162,7 @@ export const importFromExcel = async (file: File): Promise<Transaction[]> => {
         const json = XLSX.utils.sheet_to_json(worksheet);
 
         const transactions: Transaction[] = json.map((row: any) => ({
-          id: row['ID'] || generateId(), // Preserve ID if exists, else gen new
+          id: row['ID'] || generateId(),
           date: row['日期 (Date)'] || new Date().toISOString().split('T')[0],
           type: row['类型 (Type)'] as TransactionType,
           amount: Number(row['金额 (Amount)']) || 0,

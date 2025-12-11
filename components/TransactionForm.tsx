@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType } from '../types';
 import { TRANSACTION_TYPES } from '../constants';
 import { generateId } from '../utils';
@@ -6,9 +6,10 @@ import { generateId } from '../utils';
 interface Props {
   onSave: (t: Transaction) => void;
   onClose: () => void;
+  initialData?: Transaction | null;
 }
 
-const TransactionForm: React.FC<Props> = ({ onSave, onClose }) => {
+const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
   const [type, setType] = useState<TransactionType>('EXPENSE');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -20,12 +21,26 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose }) => {
   const [customName, setCustomName] = useState('');
   const [isPositive, setIsPositive] = useState(false);
 
+  useEffect(() => {
+    if (initialData) {
+      setType(initialData.type);
+      setAmount(initialData.amount.toString());
+      setDate(initialData.date);
+      setDescription(initialData.description);
+      
+      if (initialData.lender) setLender(initialData.lender);
+      if (initialData.isWithdrawable !== undefined) setIsWithdrawable(initialData.isWithdrawable);
+      if (initialData.customName) setCustomName(initialData.customName);
+      if (initialData.isPositive !== undefined) setIsPositive(initialData.isPositive);
+    }
+  }, [initialData]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount) return;
 
     const newTransaction: Transaction = {
-      id: generateId(),
+      id: initialData?.id || generateId(), // Preserve ID if editing
       date,
       type,
       amount: parseFloat(amount),
@@ -44,7 +59,9 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose }) => {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
-          <h2 className="text-white text-lg font-semibold">记一笔 (New Entry)</h2>
+          <h2 className="text-white text-lg font-semibold">
+            {initialData ? '修改记录 (Edit Entry)' : '记一笔 (New Entry)'}
+          </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
         </div>
         
@@ -62,7 +79,7 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose }) => {
                 onChange={(e) => setAmount(e.target.value)}
                 className="w-full text-3xl font-bold text-slate-800 focus:outline-none py-2 bg-transparent"
                 placeholder="0.00"
-                autoFocus
+                autoFocus={!initialData}
                 required
               />
             </div>
@@ -169,7 +186,7 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose }) => {
             type="submit"
             className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-semibold shadow-lg shadow-slate-300 transition-all active:scale-95"
           >
-            保存 (Save)
+            {initialData ? '更新 (Update)' : '保存 (Save)'}
           </button>
         </form>
       </div>

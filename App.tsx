@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Download, Upload, Wallet, PieChart, Calendar as CalendarIcon, History, Trash2, Search } from 'lucide-react';
+import { Plus, Download, Upload, Wallet, PieChart, Calendar as CalendarIcon, History, Trash2, Pencil } from 'lucide-react';
 import { Transaction, TransactionType } from './types';
 import { STORAGE_KEY, TRANSACTION_TYPES } from './constants';
 import { calculateBalances, formatCurrency, formatDate, exportToExcel, importFromExcel } from './utils';
@@ -9,10 +9,14 @@ import CalendarView from './components/CalendarView';
 // Recharts for visualization
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+type ChartRange = '7D' | '30D' | '6M';
+
 function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'CALENDAR' | 'HISTORY'>('DASHBOARD');
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [chartRange, setChartRange] = useState<ChartRange>('30D');
   
   // Data Management State
   const [exportStart, setExportStart] = useState('');
@@ -36,13 +40,35 @@ function App() {
   }, [transactions]);
 
   const handleSaveTransaction = (t: Transaction) => {
-    setTransactions(prev => [...prev, t]);
+    setTransactions(prev => {
+      const index = prev.findIndex(item => item.id === t.id);
+      if (index >= 0) {
+        // Edit existing
+        const newArr = [...prev];
+        newArr[index] = t;
+        return newArr;
+      }
+      // Add new
+      return [...prev, t];
+    });
+    setEditingTransaction(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (confirm('Are you sure you want to delete this record?')) {
       setTransactions(prev => prev.filter(t => t.id !== id));
     }
+  };
+
+  const handleEdit = (t: Transaction) => {
+    setEditingTransaction(t);
+    setShowForm(true);
+  };
+
+  const handleCloseForm = () => {
+    setShowForm(false);
+    setEditingTransaction(null);
   };
 
   const handleExport = () => {
@@ -68,23 +94,28 @@ function App() {
   // Derived Statistics
   const stats = useMemo(() => calculateBalances(transactions), [transactions]);
   
-  // Chart Data (Last 30 days trend of Liquid Funds)
+  // Chart Data
   const chartData = useMemo(() => {
     const data = [];
     const today = new Date();
-    // Generate last 30 days
-    for (let i = 29; i >= 0; i--) {
+    let daysToGenerate = 30;
+
+    if (chartRange === '7D') daysToGenerate = 7;
+    if (chartRange === '6M') daysToGenerate = 180;
+
+    for (let i = daysToGenerate - 1; i >= 0; i--) {
         const d = new Date();
         d.setDate(today.getDate() - i);
         const dateStr = d.toISOString().split('T')[0];
         const balances = calculateBalances(transactions, dateStr);
         data.push({
             date: dateStr.slice(5), // MM-DD
+            fullDate: dateStr,
             liquid: balances.liquid
         });
     }
     return data;
-  }, [transactions]);
+  }, [transactions, chartRange]);
 
   return (
     <div className="min-h-screen pb-20 sm:pb-0">
@@ -102,7 +133,7 @@ function App() {
              </div>
            </div>
            <button 
-             onClick={() => setShowForm(true)}
+             onClick={() => { setEditingTransaction(null); setShowForm(true); }}
              className="bg-blue-600 hover:bg-blue-500 text-white rounded-full p-3 shadow-lg shadow-blue-900/50 transition-all active:scale-95"
            >
              <Plus className="w-6 h-6" />
@@ -143,10 +174,26 @@ function App() {
              <div className="space-y-6">
                 {/* Chart */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                   <h3 className="text-slate-800 font-bold mb-4 flex items-center">
-                     <TrendingIcon className="w-5 h-5 mr-2 text-blue-600" />
-                     30天资金趋势 (30-Day Trend)
-                   </h3>
+                   <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-slate-800 font-bold flex items-center">
+                        <TrendingIcon className="w-5 h-5 mr-2 text-blue-600" />
+                        资金趋势 (Trends)
+                      </h3>
+                      <div className="flex bg-slate-100 rounded-lg p-1 space-x-1">
+                        {(['7D', '30D', '6M'] as ChartRange[]).map(range => (
+                          <button
+                            key={range}
+                            onClick={() => setChartRange(range)}
+                            className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                              chartRange === range ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                          >
+                            {range}
+                          </button>
+                        ))}
+                      </div>
+                   </div>
+                   
                    <div className="h-64 w-full">
                      <ResponsiveContainer width="100%" height="100%">
                        <AreaChart data={chartData}>
@@ -161,9 +208,18 @@ function App() {
                          <YAxis hide domain={['auto', 'auto']} />
                          <Tooltip 
                             contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                            labelStyle={{color: '#64748b', fontSize: '12px', marginBottom: '4px'}}
                             formatter={(value: number) => [`¥${value}`, 'Liquid']}
                          />
-                         <Area type="monotone" dataKey="liquid" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorLiquid)" />
+                         <Area 
+                            type="monotone" 
+                            dataKey="liquid" 
+                            stroke="#2563eb" 
+                            strokeWidth={3} 
+                            fillOpacity={1} 
+                            fill="url(#colorLiquid)"
+                            animationDuration={1000}
+                         />
                        </AreaChart>
                      </ResponsiveContainer>
                    </div>
@@ -212,12 +268,8 @@ function App() {
                  <span className="text-xs text-slate-500">{transactions.length} records</span>
                </div>
                <div className="divide-y divide-slate-100">
-                 {transactions.slice().reverse().map(t => {
+                 {transactions.slice().sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(t => {
                    const config = TRANSACTION_TYPES.find(type => type.type === t.type);
-                   const isPositive = t.type === 'INCOME' || t.type === 'DEPOSIT' || t.type === 'LOAN_IN' || (t.type === 'CUSTOM' && t.isPositive) || (t.type === 'INVESTMENT' && t.isWithdrawable); 
-                   // Logic for rendering +/- sign visually (not calculating logic)
-                   // Display logic: Green for inflows, Red for outflows.
-                   // LOAN_IN: Green (+Cash). Investment: Red (-Cash). Expense: Red. Income: Green.
                    
                    let displayColor = 'text-slate-800';
                    let sign = '';
@@ -231,7 +283,11 @@ function App() {
                    }
 
                    return (
-                     <div key={t.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center group">
+                     <div 
+                        key={t.id} 
+                        onClick={() => handleEdit(t)}
+                        className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center group cursor-pointer"
+                     >
                         <div className="flex items-center space-x-3">
                            <div className={`p-2 rounded-full bg-slate-100 ${config?.color}`}>
                               {config && <config.icon className="w-5 h-5" />}
@@ -250,16 +306,26 @@ function App() {
                              </div>
                            </div>
                         </div>
-                        <div className="text-right">
-                           <div className={`font-bold ${displayColor}`}>
-                             {sign}{formatCurrency(t.amount)}
+                        <div className="flex items-center space-x-3">
+                           <div className="text-right">
+                              <div className={`font-bold ${displayColor}`}>
+                                {sign}{formatCurrency(t.amount)}
+                              </div>
                            </div>
-                           <button 
-                             onClick={() => handleDelete(t.id)} 
-                             className="text-xs text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:underline mt-1"
-                           >
-                             Delete
-                           </button>
+                           <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); handleEdit(t); }}
+                                className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={(e) => handleDelete(t.id, e)} 
+                                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                           </div>
                         </div>
                      </div>
                    );
@@ -279,13 +345,17 @@ function App() {
 
       {/* Modal Form */}
       {showForm && (
-        <TransactionForm onSave={handleSaveTransaction} onClose={() => setShowForm(false)} />
+        <TransactionForm 
+          onSave={handleSaveTransaction} 
+          onClose={handleCloseForm} 
+          initialData={editingTransaction}
+        />
       )}
     </div>
   );
 }
 
-// Simple Icon component for the chart title to avoid confusion
+// Simple Icon component for the chart title
 const TrendingIcon = (props: any) => (
   <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
 )
