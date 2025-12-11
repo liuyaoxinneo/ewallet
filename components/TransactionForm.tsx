@@ -2,17 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Transaction, TransactionType } from '../types';
 import { TRANSACTION_TYPES } from '../constants';
 import { generateId } from '../utils';
+import { X, Tag } from 'lucide-react';
 
 interface Props {
   onSave: (t: Transaction) => void;
   onClose: () => void;
   initialData?: Transaction | null;
+  initialDate?: string;
+  availableTags: string[];
 }
 
-const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
+const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData, initialDate, availableTags }) => {
   const [type, setType] = useState<TransactionType>('EXPENSE');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
   
   // Dynamic fields
@@ -20,6 +23,10 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
   const [isWithdrawable, setIsWithdrawable] = useState(false);
   const [customName, setCustomName] = useState('');
   const [isPositive, setIsPositive] = useState(false);
+  
+  // Tags
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
 
   useEffect(() => {
     if (initialData) {
@@ -32,12 +39,38 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
       if (initialData.isWithdrawable !== undefined) setIsWithdrawable(initialData.isWithdrawable);
       if (initialData.customName) setCustomName(initialData.customName);
       if (initialData.isPositive !== undefined) setIsPositive(initialData.isPositive);
+      if (initialData.tags) setTags(initialData.tags);
     }
   }, [initialData]);
+
+  const handleAddTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      setTags([...tags, trimmed]);
+      setTagInput('');
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddTag();
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter(t => t !== tagToRemove));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount) return;
+    
+    // Add pending tag if input is not empty on save
+    let finalTags = tags;
+    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+      finalTags = [...tags, tagInput.trim()];
+    }
 
     const newTransaction: Transaction = {
       id: initialData?.id || generateId(), // Preserve ID if editing
@@ -45,10 +78,11 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
       type,
       amount: parseFloat(amount),
       description,
-      lender: type === 'LOAN_IN' ? lender : undefined,
+      lender: (type === 'LOAN_IN' || type === 'LOAN_REPAY') ? lender : undefined,
       isWithdrawable: type === 'INVESTMENT' ? isWithdrawable : undefined,
       customName: type === 'CUSTOM' ? customName : undefined,
       isPositive: type === 'CUSTOM' ? isPositive : undefined,
+      tags: finalTags
     };
 
     onSave(newTransaction);
@@ -57,8 +91,8 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-        <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+        <div className="bg-slate-900 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
           <h2 className="text-white text-lg font-semibold">
             {initialData ? '修改记录 (Edit Entry)' : '记一笔 (New Entry)'}
           </h2>
@@ -86,7 +120,7 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
           </div>
 
           {/* Type Selection */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {TRANSACTION_TYPES.map((t) => (
               <button
                 key={t.type}
@@ -99,7 +133,7 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
                 }`}
               >
                 <t.icon className="w-5 h-5 mb-1" />
-                <span className="text-xs font-medium">{t.label.split(' ')[0]}</span>
+                <span className="text-[10px] font-medium leading-tight text-center">{t.label.split(' ')[0]}</span>
               </button>
             ))}
           </div>
@@ -118,15 +152,17 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
           </div>
 
           {/* Conditional Fields */}
-          {type === 'LOAN_IN' && (
+          {(type === 'LOAN_IN' || type === 'LOAN_REPAY') && (
             <div>
-              <label className="text-xs text-gray-500 font-medium block mb-1">向谁借的 (Lender)</label>
+              <label className="text-xs text-gray-500 font-medium block mb-1">
+                {type === 'LOAN_IN' ? '向谁借的 (Lender)' : '还给谁 (Repay To)'}
+              </label>
               <input
                 type="text"
                 value={lender}
                 onChange={(e) => setLender(e.target.value)}
                 className="w-full p-2 border rounded-lg text-sm"
-                placeholder="Ex: 朋友张三, 银行..."
+                placeholder={type === 'LOAN_IN' ? "Ex: 朋友张三, 银行..." : "Ex: 信用卡, 朋友..."}
               />
             </div>
           )}
@@ -170,6 +206,37 @@ const TransactionForm: React.FC<Props> = ({ onSave, onClose, initialData }) => {
                </div>
             </div>
           )}
+
+          {/* Tags Section */}
+          <div>
+             <label className="text-xs text-gray-500 font-medium block mb-1">标签 (Tags)</label>
+             <div className="border rounded-lg p-2 bg-white flex flex-wrap gap-2 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500">
+               {tags.map(tag => (
+                 <span key={tag} className="bg-slate-100 text-slate-700 text-xs px-2 py-1 rounded-full flex items-center">
+                   {tag}
+                   <button type="button" onClick={() => removeTag(tag)} className="ml-1 text-slate-400 hover:text-slate-600">
+                     <X className="w-3 h-3" />
+                   </button>
+                 </span>
+               ))}
+               <div className="relative flex-grow">
+                 <input
+                    type="text"
+                    list="tags-list"
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={tags.length === 0 ? "Add tags (Enter to add)" : ""}
+                    className="text-sm w-full focus:outline-none min-w-[100px]"
+                 />
+                 <datalist id="tags-list">
+                    {availableTags.filter(t => !tags.includes(t)).map(t => (
+                      <option key={t} value={t} />
+                    ))}
+                 </datalist>
+               </div>
+             </div>
+          </div>
 
           <div>
             <label className="text-xs text-gray-500 font-medium block mb-1">备注 (Note)</label>

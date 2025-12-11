@@ -1,4 +1,4 @@
-export type TransactionType = 'INCOME' | 'EXPENSE' | 'LOAN_IN' | 'INVESTMENT' | 'DEPOSIT' | 'CUSTOM';
+export type TransactionType = 'INCOME' | 'EXPENSE' | 'LOAN_IN' | 'LOAN_REPAY' | 'INVESTMENT' | 'DEPOSIT' | 'CUSTOM';
 
 export interface Transaction {
   id: string;
@@ -8,10 +8,12 @@ export interface Transaction {
   description: string;
   
   // Specific fields based on type
-  lender?: string; // For LOAN_IN (Who did I borrow from?)
+  lender?: string; // For LOAN_IN (Who did I borrow from?) or LOAN_REPAY (Who did I pay back?)
   isWithdrawable?: boolean; // For INVESTMENT (Can I use this money now?)
   customName?: string; // For CUSTOM
   isPositive?: boolean; // For CUSTOM (Does it add or subtract from wealth?)
+  
+  tags?: string[]; // Custom tags
 }
 
 export interface DailyBalance {

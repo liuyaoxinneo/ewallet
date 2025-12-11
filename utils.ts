@@ -44,18 +44,18 @@ export const calculateBalances = (transactions: Transaction[], targetDate?: stri
         break;
       case 'LOAN_IN':
         acc.liquid += amount;
+        // Net Worth unchanged (Assets +Amount, Liabilities +Amount)
+        break;
+      case 'LOAN_REPAY':
+        acc.liquid -= amount;
+        // Net Worth unchanged (Assets -Amount, Liabilities -Amount)
         break;
       case 'INVESTMENT':
-        if (t.isWithdrawable) {
-           if (!t.isWithdrawable) {
-             acc.liquid -= amount;
-           }
-        } else {
+        // If it's withdrawable, it's still liquid. If not, it leaves liquid funds.
+        if (!t.isWithdrawable) {
           acc.liquid -= amount;
-          if (t.isWithdrawable) {
-            acc.liquid += amount; 
-          }
         }
+        // Net worth unchanged (Assets form changed)
         break;
       case 'CUSTOM':
         if (t.isPositive) {
@@ -89,10 +89,9 @@ export const getDailyBalancesForMonth = (transactions: Transaction[], year: numb
       const t = sorted[tIndex];
       const amount = Number(t.amount);
       if (t.type === 'INCOME' || t.type === 'DEPOSIT' || t.type === 'LOAN_IN' || (t.type === 'CUSTOM' && t.isPositive)) runningLiquid += amount;
-      if (t.type === 'EXPENSE' || (t.type === 'CUSTOM' && !t.isPositive)) runningLiquid -= amount;
+      if (t.type === 'EXPENSE' || t.type === 'LOAN_REPAY' || (t.type === 'CUSTOM' && !t.isPositive)) runningLiquid -= amount;
       if (t.type === 'INVESTMENT') {
-         runningLiquid -= amount;
-         if (t.isWithdrawable) runningLiquid += amount;
+         if (!t.isWithdrawable) runningLiquid -= amount;
       }
       tIndex++;
   }
@@ -106,10 +105,9 @@ export const getDailyBalancesForMonth = (transactions: Transaction[], year: numb
        const t = sorted[tIndex];
        const amount = Number(t.amount);
        if (t.type === 'INCOME' || t.type === 'DEPOSIT' || t.type === 'LOAN_IN' || (t.type === 'CUSTOM' && t.isPositive)) runningLiquid += amount;
-       if (t.type === 'EXPENSE' || (t.type === 'CUSTOM' && !t.isPositive)) runningLiquid -= amount;
+       if (t.type === 'EXPENSE' || t.type === 'LOAN_REPAY' || (t.type === 'CUSTOM' && !t.isPositive)) runningLiquid -= amount;
        if (t.type === 'INVESTMENT') {
-          runningLiquid -= amount;
-          if (t.isWithdrawable) runningLiquid += amount;
+          if (!t.isWithdrawable) runningLiquid -= amount;
        }
        tIndex++;
     }
@@ -136,10 +134,11 @@ export const exportToExcel = (transactions: Transaction[], range?: {start: strin
     '类型 (Type)': t.type,
     '金额 (Amount)': t.amount,
     '说明 (Description)': t.description,
-    '债权人 (Lender)': t.lender || '',
+    '债权人/还款对象 (Lender)': t.lender || '',
     '可提现 (Withdrawable)': t.isWithdrawable ? 'Yes' : 'No',
     '自定义名称 (Custom Name)': t.customName || '',
-    '正向影响 (Is Positive)': t.type === 'CUSTOM' ? (t.isPositive ? 'Yes' : 'No') : ''
+    '正向影响 (Is Positive)': t.type === 'CUSTOM' ? (t.isPositive ? 'Yes' : 'No') : '',
+    '标签 (Tags)': t.tags ? t.tags.join(', ') : ''
   }));
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -167,10 +166,11 @@ export const importFromExcel = async (file: File): Promise<Transaction[]> => {
           type: row['类型 (Type)'] as TransactionType,
           amount: Number(row['金额 (Amount)']) || 0,
           description: row['说明 (Description)'] || '',
-          lender: row['债权人 (Lender)'],
+          lender: row['债权人/还款对象 (Lender)'] || row['债权人 (Lender)'],
           isWithdrawable: row['可提现 (Withdrawable)'] === 'Yes',
           customName: row['自定义名称 (Custom Name)'],
-          isPositive: row['正向影响 (Is Positive)'] === 'Yes'
+          isPositive: row['正向影响 (Is Positive)'] === 'Yes',
+          tags: row['标签 (Tags)'] ? row['标签 (Tags)'].split(',').map((s: string) => s.trim()).filter((s: string) => s) : []
         }));
         resolve(transactions);
       } catch (err) {
